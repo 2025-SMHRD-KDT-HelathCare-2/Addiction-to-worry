@@ -1,0 +1,24 @@
+// 환경변수 (DB 비밀번호, API 키 등 - 절대 올리면 안됨!)
+.env
+*.env
+.env.local
+.env.production
+
+// Node.js 의존성 폴더 (용량이 너무 커서 올릴 필요 없음)
+node_modules/
+client/node_modules/
+server/node_modules/
+
+// 로그 파일
+*.log
+npm-debug.log*
+
+// OS 자동생성 파일
+.DS_Store        # 맥
+Thumbs.db        # 윈도우
+
+// IDE 설정 파일
+.vscode/
+.idea/
+
+*.txt
