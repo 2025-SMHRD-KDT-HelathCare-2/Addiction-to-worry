@@ -21,16 +21,16 @@ app.use(express.json());
 app.use(express.urlencoded({extended:true}));
 
 // 5. 만들어둔 라우터 설계도(index.js) 가져오기
-const indexRouter = require('./routes/index');
+const mainRouter = require('./routes/main');
 
 // 6. '/'로 들어오면 indexRouter로 보내야해요.
-app.use('/', indexRouter);
+app.use('/', mainRouter);
 
 
 // 4. 서버 실행
 app.listen(app.get('port'), ()=>{console.log(`${app.get('port')}번 포트에서 대기중...`);});
 
 // 7. 노드 서버 실행
-// > nodemon server.js
+// > nodemon app.js
 
 // 8. 브라우저 창에서 'localhost:3000/' 실행
