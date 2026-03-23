@@ -1,17 +1,26 @@
-// mysql2 : mysql과 db를 연결해서 쿼리문을 실행시킬 수 있는 모듈
-const mysql = require("mysql2");
+// config/database.js
+const mysql = require('mysql2/promise'); // promise 버전 사용 (try-catch를 위해)
+require('dotenv').config();
 
-// mysql 터미널 명령어 : npm install mysql2
-// 사용할 db 정보 정의
-// host, user, password, port, database
-const db_info = {
+const pool = mysql.createPool({
     host: process.env.DB_HOST,
-    user:  process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
+    user: process.env.DB_USER,
     port: process.env.DB_PORT,
-    database: process.env.DB_NAME
-};
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    waitForConnections: true,    // 연결이 다 차면 대기
+    connectionLimit: 10,         // 최대 10개의 통로를 미리 열어둠
+    queueLimit: 0
+});
 
-// db연결 객체 생성
-// mysql database 연결 통로 생성
-module.exports = mysql.createConnection(db_info);
+// 연결 테스트 (서버 실행 시 확인용)
+pool.getConnection()
+    .then(conn => {
+        console.log("✅ DB 커넥션 풀 준비 완료!");
+        conn.release(); // 테스트 후 통로 반납
+    })
+    .catch(err => {
+        console.error("❌ DB 풀 생성 실패:", err.message);
+    });
+
+module.exports = pool;
