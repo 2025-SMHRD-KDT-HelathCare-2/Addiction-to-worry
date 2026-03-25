@@ -46,12 +46,11 @@ export default function Dashboard() {
       console.log("🟢 [서버 연결]:", data.message);
     });
 
-    // ✨ [핵심 해결 포인트] 서버에서 분석 결과가 도착했을 때!
-    // 여기서 표(historyLog)를 업데이트해야 항상 최신 점수와 상태가 반영됩니다.
+    // 서버에서 분석 결과가 도착했을 때!
     socketRef.current.on('analysis_result', (data) => {
       if (data.status === 'SUCCESS') {
-        // 백엔드 상태(GOOD_POSTURE 등)를 프론트엔드 UI 규격(NORMAL 등)으로 변환
-        const currentStatus = data.postureStatus === 'GOOD_POSTURE' ? 'NORMAL' : data.postureStatus === 'SLUMPED' ? 'WARNING' : 'CAUTION';
+        // ✨ [수정됨] 백엔드 명세 변경에 따라 data.postureStatus -> data.posture_status 로 변경!
+        const currentStatus = data.posture_status === 'GOOD_POSTURE' ? 'NORMAL' : data.posture_status === 'SLUMPED' ? 'WARNING' : 'CAUTION';
         
         // 화면 중앙 피드백과 아이콘 상태 업데이트
         setServerFeedback(data.message);
@@ -61,7 +60,7 @@ export default function Dashboard() {
         const dynamicScore = currentStatus === 'NORMAL' ? '96%' : currentStatus === 'CAUTION' ? '72%' : '45%'; 
         const time = new Date().toLocaleTimeString('ko-KR'); 
         
-        // 표 기록 추가 (최신 5개만 유지)
+        // 표 기록 추가 (최신 5개만 화면에 유지)
         setHistoryLog(prev => [{ 
           detected_at: time, 
           pose_status: currentStatus, 
@@ -163,10 +162,10 @@ export default function Dashboard() {
         if (socketRef.current) {
           socketRef.current.emit('stream_data', {
             landmarks: res.poseLandmarks, 
-            noiseDb: decibelRef.current   
+            // ✨ [수정됨] 백엔드 명세 변경에 따라 noiseDb -> noise_db 로 변경!
+            noise_db: decibelRef.current   
           });
         }
-        // (주의) 여기서 historyLog를 찍으면 옛날 값이 기록됩니다! 그래서 지웠습니다.
       }
     });
 
