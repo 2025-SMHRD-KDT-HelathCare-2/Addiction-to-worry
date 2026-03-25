@@ -39,4 +39,46 @@ const checkUserPresence = (landmarks) => {
     return true;
 };
 
-module.exports = { detectCameraMode, analyzeNoiseLevel, checkUserPresence };
+/*세부 자세 분석 (턱 괴기, 엎드림 등)
+ */
+const analyzePosture = (landmarks) => {
+    if (!landmarks || landmarks.length < 11) return 'UNKNOWN';
+
+    const nose = landmarks[0];           // 코
+    const leftShoulder = landmarks[11];  // 왼쪽 어깨
+    const rightShoulder = landmarks[12]; // 오른쪽 어깨
+    const leftWrist = landmarks[15];     // 왼쪽 손목
+    const rightWrist = landmarks[16];    // 오른쪽 손목
+
+    // [판정 A] 엎드림/거북목: 코가 어깨선보다 한참 아래로 내려갈 때
+    const shoulderY = (leftShoulder.y + rightShoulder.y) / 2;
+    if (nose.y > shoulderY) return 'SLUMPED';
+
+    // [판정 B] 턱 괴기: 손목이 코 근처(매우 가까운 거리)에 있을 때
+    const distLeft = Math.sqrt(Math.pow(nose.x - leftWrist.x, 2) + Math.pow(nose.y - leftWrist.y, 2));
+    const distRight = Math.sqrt(Math.pow(nose.x - rightWrist.x, 2) + Math.pow(nose.y - rightWrist.y, 2));
+    
+    // 거리 기준값(0.12)은 환경에 따라 조정 가능
+    if (distLeft < 0.12 || distRight < 0.12) return 'LEANING_ON_HAND';
+
+    return 'GOOD_POSTURE';
+};
+
+/**
+ * 5. 상황별 코칭 메시지 생성
+ */
+const getCoachingMessage = (posture, noise) => {
+    if (posture === 'SLUMPED') return "자세가 너무 낮아요! 허리를 쭉 펴볼까요?";
+    if (posture === 'LEANING_ON_HAND') return "턱을 괴면 척추가 휘어질 수 있어요.";
+    if (noise === 'NOISY') return "주변이 조금 시끄럽네요. 이어폰 착용을 추천드려요.";
+    return "집중하기 딱 좋은 자세입니다!";
+};
+
+// 모든 함수 내보내기
+module.exports = { 
+    detectCameraMode, 
+    analyzeNoiseLevel, 
+    checkUserPresence, 
+    analyzePosture, 
+    getCoachingMessage 
+};

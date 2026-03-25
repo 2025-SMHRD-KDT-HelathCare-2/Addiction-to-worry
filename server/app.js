@@ -17,7 +17,13 @@ const io = new Server(server, {        // [추가] 소켓 서버 연결 및 CORS
 });
 
 // [추가] 분석 엔진 가져오기 (파일이 utils 폴더에 있어야 함)
-const { detectCameraMode, analyzeNoiseLevel, checkUserPresence } = require('./utils/analysisEngine');
+const { 
+    detectCameraMode, 
+    analyzeNoiseLevel, 
+    checkUserPresence, 
+    analyzePosture, 
+    getCoachingMessage 
+} = require('./utils/analysisEngine');
 
 // 3. 포트 번호 지정
 app.set('port', process.env.PORT||3000);
@@ -56,6 +62,13 @@ app.use(express.static(path.join(__dirname, '../client/dist')));
 io.on('connection', (socket) => {
     console.log('클라이언트와 소켓 연결됨! ID:', socket.id);
 
+    // [6단계 추가] 엔진 준비 완료 신호 전송
+    // 리액트에서 이 신호를 받으면 "분석 중..." 로딩 스피너를 끕니다.
+    socket.emit('engine_ready', { 
+        status: 'READY',
+        message: '실시간 AI 분석 엔진이 가동되었습니다.' 
+    });
+
     socket.on('stream_data', (data) => {
         const { landmarks, noiseDb } = data;
 
@@ -63,19 +76,25 @@ io.on('connection', (socket) => {
         if (!checkUserPresence(landmarks)) {
             return socket.emit('analysis_result', {
                 status: 'USER_NOT_FOUND',
-                message: '카메라에서 사용자를 찾을 수 없습니다.'
+                message: '사용자를 찾는 중입니다...' 
             });
         }
 
-        // 2. 모드 감지 및 소음 분석
+        // 2. [6단계 핵심] 통합 분석 (모드 + 소음 + 자세)
         const cameraMode = detectCameraMode(landmarks);
         const noiseStatus = analyzeNoiseLevel(noiseDb);
+        const postureStatus = analyzePosture(landmarks); // 자세 분석 추가
+        
+        // 3. [6단계 핵심] 분석 결과에 따른 코칭 메시지 생성
+        const coachingMsg = getCoachingMessage(postureStatus, noiseStatus);
 
-        // 3. 결과 전송
+        // 4. 결과 전송 (리액트로 모든 데이터를 한 번에 쏴줍니다)
         socket.emit('analysis_result', {
             status: 'SUCCESS',
-            cameraMode,
-            noiseStatus,
+            cameraMode,     // FRONT_VIEW / SIDE_VIEW
+            noiseStatus,    // QUIET / NORMAL / NOISY
+            postureStatus,  // GOOD_POSTURE / SLUMPED / LEANING_ON_HAND
+            message: coachingMsg, // "턱 괴지 마세요!" 같은 실제 텍스트
             timestamp: new Date()
         });
     });
