@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import './App.css';
 
 import Logo from './components/Logo';
@@ -10,11 +11,12 @@ import Report from './pages/Report';
 import MyPage from './pages/MyPage';
 
 export default function App() {
-  const [activePage, setActivePage] = useState('home');
+  const navigate = useNavigate();
+  const location = useLocation(); 
+
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // 1. 앱 실행 시 세션 체크 (로그인 유지 확인)
   useEffect(() => {
     const checkSession = async () => {
       try {
@@ -26,7 +28,7 @@ export default function App() {
         
         if (data.success) {
           setIsLoggedIn(true);
-          setActivePage('dashboard');
+          // 💡 [핵심 수정] 강제로 대시보드로 보내는 navigate('/dashboard') 로직 삭제
         } else {
           setIsLoggedIn(false);
         }
@@ -37,9 +39,8 @@ export default function App() {
       }
     };
     checkSession();
-  }, []);
+  }, []); // 💡 [핵심 수정] location.pathname 감시를 없애서, 앱 켤 때 딱 한 번만 세션을 체크하도록 변경
 
-  // 2. 로그아웃 처리
   const handleLogout = async () => {
     try {
       const res = await fetch('http://localhost:3000/user/logout', {
@@ -51,7 +52,7 @@ export default function App() {
       if (data.success) {
         alert("성공적으로 로그아웃 되었습니다.");
         setIsLoggedIn(false);
-        setActivePage('home'); 
+        navigate('/'); 
       }
     } catch (err) {
       console.error("로그아웃 에러:", err);
@@ -66,24 +67,31 @@ export default function App() {
     );
   }
 
+  const handleNavigate = (page) => {
+    if (page === 'home') navigate('/');
+    else navigate(`/${page}`);
+  };
+
   return (
     <div className="min-h-screen bg-[#Eef2f6] font-sans selection:bg-indigo-100">
       <header className="bg-[#24223E] px-8 py-5 flex justify-between items-center shadow-xl sticky top-0 z-50 border-b border-white/5">
-        <div className="flex-1 cursor-pointer" onClick={() => setActivePage('home')}>
+        <div className="flex-1 cursor-pointer" onClick={() => navigate('/')}>
           <Logo />
         </div>
         
         {isLoggedIn && (
           <nav className="hidden md:flex space-x-2 bg-white/5 p-1.5 rounded-2xl border border-white/10">
             {[
-              { id: 'dashboard', l: '대시보드' },
-              { id: 'report', l: '분석 리포트' },
-              { id: 'mypage', l: '마이페이지' }
+              { id: 'dashboard', l: '대시보드', path: '/dashboard' },
+              { id: 'report', l: '분석 리포트', path: '/report' },
+              { id: 'mypage', l: '마이페이지', path: '/mypage' }
             ].map((nav) => (
               <button 
                 key={nav.id} 
-                onClick={() => setActivePage(nav.id)}
-                className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all ${activePage === nav.id ? 'bg-[#5B44F2] text-white shadow-xl' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+                onClick={() => navigate(nav.path)} 
+                className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all ${
+                  location.pathname.startsWith(nav.path) ? 'bg-[#5B44F2] text-white shadow-xl' : 'text-slate-400 hover:text-white hover:bg-white/10'
+                }`}
               >
                 {nav.l}
               </button>
@@ -94,8 +102,8 @@ export default function App() {
         <div className="flex-1 flex gap-4 items-center justify-end">
           {!isLoggedIn ? (
             <div className="flex gap-4">
-              <button onClick={() => setActivePage('login')} className="text-sm font-black text-indigo-200 hover:text-white transition-colors">로그인</button>
-              <button onClick={() => setActivePage('signup')} className="px-5 py-2.5 bg-[#5B44F2] text-white rounded-xl text-sm font-black shadow-lg hover:bg-[#4a36c4] transition-colors">회원가입</button>
+              <button onClick={() => navigate('/login')} className="text-sm font-black text-indigo-200 hover:text-white transition-colors">로그인</button>
+              <button onClick={() => navigate('/signup')} className="px-5 py-2.5 bg-[#5B44F2] text-white rounded-xl text-sm font-black shadow-lg hover:bg-[#4a36c4] transition-colors">회원가입</button>
             </div>
           ) : (
             <button onClick={handleLogout} className="p-2.5 bg-white/5 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-white/10 transition-all" title="로그아웃">
@@ -106,19 +114,15 @@ export default function App() {
       </header>
       
       <main>
-        {/* ✨ [수정] 홈 화면 버튼 클릭 시, 로그인 여부에 따라 목적지를 다르게 설정합니다. */}
-        {activePage === 'home' && (
-          <Home onStart={() => setActivePage(isLoggedIn ? 'dashboard' : 'signup')} />
-        )}
-        
-        {activePage === 'login' && <Login onNavigate={setActivePage} setIsLoggedIn={setIsLoggedIn} />}
-        
-        {/* ✨ [수정] 가입 후 바로 대시보드로 보내기 위해 setIsLoggedIn을 넘겨줍니다. */}
-        {activePage === 'signup' && <SignUp onNavigate={setActivePage} setIsLoggedIn={setIsLoggedIn} />}
-        
-        {activePage === 'dashboard' && <Dashboard />}
-        {activePage === 'report' && <Report />}
-        {activePage === 'mypage' && <MyPage />}
+        <Routes>
+          <Route path="/" element={<Home onStart={() => navigate(isLoggedIn ? '/dashboard' : '/signup')} />} />
+          <Route path="/login" element={<Login onNavigate={handleNavigate} setIsLoggedIn={setIsLoggedIn} />} />
+          <Route path="/signup" element={<SignUp onNavigate={handleNavigate} setIsLoggedIn={setIsLoggedIn} />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/report" element={<Report />} />
+          <Route path="/report/:imm_idx" element={<Report />} />
+          <Route path="/mypage" element={<MyPage />} />
+        </Routes>
       </main>
     </div>
   );
