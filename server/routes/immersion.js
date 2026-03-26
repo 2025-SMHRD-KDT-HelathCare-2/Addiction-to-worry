@@ -106,7 +106,6 @@ router.get('/report/:imm_idx', async (req, res) => {
     
     try {
         // 1. 기본 세션 정보 및 총 집중 시간(초) 계산
-        // TIMESTAMPDIFF를 사용하여 시작~종료 사이의 전체 시간을 초 단위로 가져옵니다.
         const [info] = await db.query(`
             SELECT *, 
                    TIMESTAMPDIFF(SECOND, CONCAT(imm_date, ' ', start_time), CONCAT(imm_date, ' ', end_time)) AS total_seconds
@@ -118,7 +117,6 @@ router.get('/report/:imm_idx', async (req, res) => {
         }
 
         // 2. 소음 통계 (평균 데시벨 + 가장 빈번한 소음 종류)
-        // 서브쿼리를 사용해 가장 많이 발생한 소음 이름(top_noise)을 함께 가져옵니다.
         const [noise] = await db.query(`
             SELECT 
                 ROUND(AVG(decibel), 1) as avg_decibel, 
@@ -135,7 +133,7 @@ router.get('/report/:imm_idx', async (req, res) => {
             GROUP BY pose_status
             ORDER BY count DESC`, [imm_idx]);
 
-        // 리액트 작업자가 사용하기 편하도록 구조화하여 응답
+        // 최종 응답 (리액트 가공 편의성 반영)
         res.json({ 
             success: true, 
             data: {
@@ -143,7 +141,7 @@ router.get('/report/:imm_idx', async (req, res) => {
                 noise_summary: {
                     average: noise[0].avg_decibel || 0,
                     count: noise[0].total_count,
-                    main_obstacle: noise[0].top_noise || "없음" // 가장 방해된 소음
+                    main_obstacle: noise[0].top_noise || "없음"
                 },
                 pose_summary: poses
             }
