@@ -161,8 +161,12 @@ function evaluatePose(landmarks, calibration, mode) {
 
     // 3. 정면 모드 거북목 및 기울어짐 판정
     if (mode === 'front') {
+        // calibration 방어 코드 - distY가 없거나 0에 가까우면 판정 불가
+        if (!calibration || calibration.distY < 0.001) {
+            return { type: 'NORMAL', status: 'NORMAL' };
+        }
         // 영점 조절 시점(calibration) 대비 현재 귀-어깨 거리 비율
-        const ratio = Math.abs(landmarks[7].y - landmarks[11].y) / (calibration?.distY || 0.12);
+        const ratio = Math.abs(landmarks[7].y - landmarks[11].y) / calibration.distY;
         
         if (ratio <= 0.7)  return { type: 'TURTLE', status: 'WARNING', load: '18kg 이상' };
         if (ratio <= 0.85) return { type: 'TURTLE', status: 'CAUTION', load: '12kg' };
