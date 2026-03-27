@@ -161,7 +161,16 @@ export default function Dashboard() {
       const now = Date.now();
       if (now - lastSentTimeRef.current >= 1000) {
         lastSentTimeRef.current = now;
-        if (socketRef.current) socketRef.current.emit('stream_data', { landmarks: res.poseLandmarks, noise_db: decibelRef.current });
+        
+        // 백엔드(무지님) 요청 반영: calibration, faceLandmarks 필드 추가 (26.03.27)
+        if (socketRef.current) {
+          socketRef.current.emit('stream_data', { 
+            landmarks: res.poseLandmarks, 
+            noise_db: decibelRef.current,
+            calibration: calibrationRef.current,
+            faceLandmarks: faceLandmarksRef.current
+          });
+        }
       }
     });
 
