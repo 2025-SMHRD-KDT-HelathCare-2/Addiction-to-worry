@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../components/Card';
-import { evaluateSmartFocus, resetStaticTracking } from '../SFEngine';
 import { io } from 'socket.io-client';
+
+// 💡 SFEngine.js import 완전 삭제 (이제 프론트에서 자체 계산하지 않음)
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -29,7 +30,10 @@ export default function Dashboard() {
 
   const [decibel, setDecibel] = useState(0);
   const [isFocusing, setIsFocusing] = useState(false);
-  const [engineResult, setEngineResult] = useState(null);
+  
+  // 기존 engineResult 대신, 서버에서 첫 데이터를 받았는지 확인하는 상태로 변경
+  const [isEngineReady, setIsEngineReady] = useState(false); 
+  
   const [focusSeconds, setFocusSeconds] = useState(0);
   const [historyLog, setHistoryLog] = useState([]);
 
@@ -42,15 +46,24 @@ export default function Dashboard() {
 
     socketRef.current.on('analysis_result', (data) => {
       if (data.status === 'SUCCESS') {
-        let currentStatus = 'CAUTION';
-        const backendPosture = data.posture_status || data.postureStatus;
+        setIsEngineReady(true); // 서버 응답이 오기 시작하면 로딩 스피너 해제
+        
+        let currentStatus = 'NORMAL';
+        const backendPosture = data.posture_status || data.postureStatus || '';
 
-        if (backendPosture === 'GOOD_POSTURE' || backendPosture === 'NORMAL') {
-          currentStatus = 'NORMAL';
-        } else if (backendPosture === 'SLUMPED' || backendPosture === 'WARNING') {
+        // 💡 1순위: 위험(_WARNING) 감지 (includes 사용)
+        // 엔진 코드 특성상 턱괴기(LEANING_ON_HAND)는 뒤에 꼬리표가 없으므로 별도로 위험 처리
+        if (backendPosture.includes('_WARNING') || backendPosture === 'LEANING_ON_HAND') {
           currentStatus = 'WARNING';
-        } else {
+        } 
+        // 💡 2순위: 주의(_CAUTION) 감지
+        // 위에서 WARNING에 안 걸린 경우에만 CAUTION 검사 (색상 꼬임 방지)
+        else if (backendPosture.includes('_CAUTION')) {
           currentStatus = 'CAUTION';
+        } 
+        // 💡 3순위: 그 외 정상 상태 (GOOD_POSTURE 등)
+        else {
+          currentStatus = 'NORMAL';
         }
 
         setServerFeedback(data.message);
@@ -59,6 +72,7 @@ export default function Dashboard() {
         const finalScore = data.current_score || 0; 
         setDisplayScore(finalScore);
 
+        // 히스토리 로그 업데이트 (최대 5개 유지)
         const time = new Date().toLocaleTimeString('ko-KR');
         setHistoryLog(prev => [{
           detected_at: time,
@@ -75,6 +89,7 @@ export default function Dashboard() {
     return () => { if (socketRef.current) socketRef.current.disconnect(); };
   }, []);
 
+  // 타이머 로직
   useEffect(() => {
     let interval;
     if (isFocusing) interval = setInterval(() => setFocusSeconds(p => p + 1), 1000);
@@ -135,11 +150,22 @@ export default function Dashboard() {
       ctx.strokeStyle = "rgba(234, 255, 113, 0.8)"; ctx.lineWidth = 2;
       res.poseLandmarks.forEach(p => { ctx.beginPath(); ctx.arc(p.x * 640, p.y * 480, 3, 0, 2 * Math.PI); ctx.fillStyle = "#D9F99D"; ctx.fill(); ctx.stroke(); }); ctx.restore();
 
-      if (needsCalibrationRef.current) { calibrationRef.current = { distY: Math.abs(res.poseLandmarks[7].y - res.poseLandmarks[11].y) }; needsCalibrationRef.current = false; }
+      // 💡 백엔드 요청에 맞춘 영점 조절(Calibration) 객체 데이터 확장
+      if (needsCalibrationRef.current) { 
+        const leftEar = res.poseLandmarks[7] || { x: 0, y: 0 };
+        const leftShoulder = res.poseLandmarks[11] || { x: 0, y: 0 };
+        const nose = res.poseLandmarks[0] || { x: 0, y: 0 };
 
-      const analysis = evaluateSmartFocus({ landmarks: res.poseLandmarks, faceLandmarks: faceLandmarksRef.current, db: decibelRef.current }, calibrationRef.current);
-      setEngineResult(analysis);
+        calibrationRef.current = { 
+          distY: Math.abs(leftEar.y - leftShoulder.y),
+          noseY: nose.y,
+          earX: leftEar.x,
+          sideDistX: Math.abs(leftEar.x - leftShoulder.x) * 640 
+        }; 
+        needsCalibrationRef.current = false; 
+      }
 
+      // 더 이상 여기서 로컬 분석(evaluateSmartFocus)을 하지 않고, 백엔드 의존
       const now = Date.now();
       if (now - lastSentTimeRef.current >= 1000) {
         lastSentTimeRef.current = now;
@@ -180,7 +206,8 @@ export default function Dashboard() {
     if (audioContextRef.current) { audioContextRef.current.close(); audioContextRef.current = null; }
     if (poseRef.current) { poseRef.current.close(); poseRef.current = null; }
     if (faceMeshRef.current) { faceMeshRef.current.close(); faceMeshRef.current = null; }
-    setEngineResult(null);
+    
+    setIsEngineReady(false);
     setServerFeedback("우측 상단의 '▶ 측정 시작' 버튼을 눌러주세요.");
     setServerStatus('--');
     setDisplayScore('--');
@@ -189,7 +216,6 @@ export default function Dashboard() {
   const handleStartMeasurement = async () => {
     try {
       const userInfoStr = localStorage.getItem('user_info');
-      // 💡 유저 정보가 없으면 임의로 1번으로 보내던 더미 로직 삭제 -> 강제 튕김 처리
       if (!userInfoStr) {
         alert("로그인 정보가 없습니다. 다시 로그인 해주세요.");
         navigate('/login');
@@ -197,6 +223,7 @@ export default function Dashboard() {
       }
       const actualUserIdx = JSON.parse(userInfoStr).user_idx;
 
+      // 💡 시작 API를 호출하면 백엔드에서 자동으로 reset_static_tracking()이 돕니다.
       const res = await fetch('http://localhost:3000/api/immersion/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -211,7 +238,7 @@ export default function Dashboard() {
 
         setIsFocusing(true);
         setFocusSeconds(0);
-        resetStaticTracking();
+        // 기존의 resetStaticTracking() 호출부 완전 삭제
         setHistoryLog([]);
         startCamera();
       } else {
@@ -320,7 +347,7 @@ export default function Dashboard() {
             <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex-grow">
               <div className="flex justify-between items-center mb-5 px-1">
                 <h3 className="font-bold text-slate-900 text-lg tracking-tight">실시간 AI 비전 분석</h3>
-                {isFocusing && engineResult && <div className="bg-slate-50 px-3.5 py-1.5 rounded-full flex items-center gap-2 text-slate-500 text-xs font-bold border border-slate-100"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>AI 분석 활성화됨</div>}
+                {isFocusing && isEngineReady && <div className="bg-slate-50 px-3.5 py-1.5 rounded-full flex items-center gap-2 text-slate-500 text-xs font-bold border border-slate-100"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>AI 분석 활성화됨</div>}
               </div>
 
               <div className="w-full aspect-[4/3] bg-slate-950 rounded-2xl relative overflow-hidden shadow-2xl shadow-slate-200">
@@ -333,7 +360,7 @@ export default function Dashboard() {
                     <p className="font-bold tracking-wider text-sm text-slate-300">카메라 대기 중... '측정 시작'을 눌러주세요.</p>
                   </div>
                 )}
-                {isFocusing && !engineResult && (
+                {isFocusing && !isEngineReady && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 z-20 text-white gap-5">
                     <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
                     <p className="font-bold text-sm tracking-widest text-slate-200">AI 모델 데이터를 불러오는 중...</p>
