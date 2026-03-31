@@ -57,8 +57,6 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-// 5. 정적 파일 접근 (리액트 빌드 폴더)
-app.use(express.static(path.join(__dirname, '../client/dist')));
 
 
 io.on('connection', (socket) => {
@@ -182,8 +180,13 @@ const mypageRouter = require('./routes/mypage');
 
 app.use('/', mainRouter);
 app.use('/auth', userRouter);
+app.use('/user', userRouter);
 app.use('/api/immersion', immersionRouter);
 app.use('/api/mypage', mypageRouter);
+
+
+// 정적 파일 접근 (리액트 빌드 폴더)
+app.use(express.static(path.join(__dirname, '../client/dist')));
 
 // 7. 에러 처리 미들웨어 (404 & 500)
 app.use((req, res) => {

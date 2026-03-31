@@ -85,9 +85,9 @@ router.post('/send-email', async (req, res) => {
 
     try {
         await transporter.sendMail({
-            from: `"포스처가드" <${process.env.MAIL_USER}>`,
+            from: `"smart-focus" <${process.env.MAIL_USER}>`,
             to: email,
-            subject: "[포스처가드] 회원가입 인증번호입니다.",
+            subject: "[smart-focus] 회원가입 인증번호입니다.",
             text: `인증번호는 [${authCode}] 입니다. 3분 이내에 입력해주세요.`
         });
 
@@ -195,28 +195,33 @@ router.post('/check-nick', async (req, res) => {
     }
 });
 
+// --- [추가] 1. 구글 로그인 시작 라우터 ---
+// 프론트엔드에서 http://localhost:3000/auth/google 로 접속하면 여기가 실행됩니다.
+router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
 // --- [신규 추가] 소셜 로그인 실행 라우터 ---
 // 1. 프론트엔드에서 구글 로그인 버튼을 눌렀을 때 가는 곳
-router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-
-// 2. 구글 인증이 끝나고 우리 서버로 돌아오는 통로 (프론트 요청 반영)
 router.get('/google/callback', 
   passport.authenticate('google', { failureRedirect: '/login' }), 
   (req, res) => {
-    // 일반 로그인과 형식을 맞추기 위해 세션에 저장
+    // 1. 유저 정보를 세션에 확실히 담기
     req.session.user = req.user; 
     
-    // 프론트엔드 담당자가 요청한 주소로 리다이렉트
-    res.redirect('http://localhost:5173/dashboard');
+    // 2. [매우 중요] 세션을 DB/메모리에 물리적으로 저장한 후 리다이렉트
+    // 이 콜백 함수가 실행된 시점은 세션 저장이 100% 끝난 시점입니다.
+    req.session.save((err) => {
+      if (err) {
+        console.error("세션 저장 중 에러:", err);
+        return res.redirect('http://localhost:5173/login');
+      }
+      
+      // 이제 리액트 대시보드로 이동하면 세션 쿠키가 유효합니다.
+      res.redirect('http://localhost:5173/dashboard');
+    });
   }
 );
 
-router.get('/kakao', passport.authenticate('kakao'));
-router.get('/kakao/callback', passport.authenticate('kakao', { failureRedirect: '/login' }), (req, res) => {
-    req.session.user = req.user;
-    res.redirect('http://localhost:5173/dashboard');
-});
+
 
 // [POST] /login - 로그인
 router.post('/login', async (req, res, next) => {
