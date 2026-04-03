@@ -38,6 +38,9 @@ export default function Dashboard() {
   const [focusSeconds, setFocusSeconds] = useState(0);
   const [historyLog, setHistoryLog] = useState([]);
 
+  /* 영점 조절 카운트다운 상태 추가 */
+  const [calibrationCountdown, setCalibrationCountdown] = useState(null);
+
   /* 서버 피드백 및 상태 표시 관리 */
   const [serverFeedback, setServerFeedback] = useState("우측 상단의 '▶ 측정 시작' 버튼을 눌러주세요.");
   const [serverStatus, setServerStatus] = useState('--');
@@ -66,7 +69,10 @@ export default function Dashboard() {
           currentStatus = 'NORMAL';
         }
 
-        setServerFeedback(data.message);
+        /* 카운트다운 중이 아닐 때만 서버 피드백 업데이트 */
+        if (calibrationCountdown === null) {
+          setServerFeedback(data.message);
+        }
         setServerStatus(currentStatus);
 
         const finalScore = data.current_score || 0; 
@@ -86,7 +92,7 @@ export default function Dashboard() {
     });
 
     return () => { if (socketRef.current) socketRef.current.disconnect(); };
-  }, []);
+  }, [calibrationCountdown]);
 
   /**
    * 측정 진행 시간 카운터 로직
@@ -101,6 +107,31 @@ export default function Dashboard() {
   const formatTime = (sec) => {
     const h = Math.floor(sec / 3600); const m = Math.floor((sec % 3600) / 60); const s = sec % 60;
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  /**
+   * 영점 조절(캘리브레이션) 핸들러
+   * 3초 카운트다운 후 정면 자세를 캡처하여 기준점으로 설정합니다.
+   */
+  const handleCalibrationRequest = () => {
+    if (calibrationCountdown !== null) return;
+
+    let timer = 3;
+    setCalibrationCountdown(timer);
+    setServerFeedback(`${timer}초 후 기준점을 설정합니다. 정면을 응시하세요.`);
+
+    const countdownInterval = setInterval(() => {
+      timer -= 1;
+      if (timer > 0) {
+        setCalibrationCountdown(timer);
+        setServerFeedback(`${timer}초 후 기준점을 설정합니다. 정면을 응시하세요.`);
+      } else {
+        clearInterval(countdownInterval);
+        setCalibrationCountdown(null);
+        needsCalibrationRef.current = true;
+        setServerFeedback("기준점 설정이 완료되었습니다.");
+      }
+    }, 1000);
   };
 
   /**
@@ -219,7 +250,7 @@ export default function Dashboard() {
   };
 
   /**
-   * 측정 시작 핸들러: shared 응답 규격(data.data.imm_idx) 반영
+   * 측정 시작 핸들러
    */
   const handleStartMeasurement = async () => {
     try {
@@ -230,11 +261,8 @@ export default function Dashboard() {
         return;
       }
       const actualUserIdx = JSON.parse(userInfoStr).user_idx;
-
-      /* immersionApi 모듈 연동 */
       const result = await immersionApi.start(actualUserIdx);
 
-      /* 백엔드 shared 규격에 맞춰 imm_idx 추출 로직 수정 */
       if (result && result.success && result.data?.imm_idx) {
         const immIdx = result.data.imm_idx;
         setCurrentImmIdx(immIdx);
@@ -254,7 +282,7 @@ export default function Dashboard() {
   };
 
   /**
-   * 측정 종료 핸들러: 리포트 이동 로직 및 shared 규격 동기화
+   * 측정 종료 핸들러
    */
   const handleStopMeasurement = async () => {
     setIsFocusing(false);
@@ -275,14 +303,12 @@ export default function Dashboard() {
       }
       const actualUserIdx = JSON.parse(userInfoStr).user_idx;
 
-      /* immersionApi 모듈 연동 */
       const result = await immersionApi.end({
         imm_idx: currentImmIdxRef.current,
         imm_score: finalScore,
         user_idx: actualUserIdx 
       });
 
-      /* 백엔드 shared 규격 검증 후 리포트 상세 페이지로 이동 */
       if (result && result.success) {
         alert("집중 수고하셨습니다! 분석 리포트로 이동합니다.");
         navigate(`/report/${currentImmIdxRef.current}`);
@@ -296,7 +322,6 @@ export default function Dashboard() {
 
   const displayStatusLabel = serverStatus === 'WARNING' ? '위험' : serverStatus === 'CAUTION' ? '주의' : serverStatus === 'NORMAL' ? '정상' : '--';
 
-  /* UI 렌더링 영역 유지 */
   return (
     <div className="max-w-[1400px] mx-auto min-h-[90vh] p-6 lg:p-10 animate-fade-in font-sans selection:bg-indigo-100">
 
@@ -308,10 +333,11 @@ export default function Dashboard() {
         <div className="flex gap-4 items-center">
           {isFocusing && (
             <button
-              onClick={() => { needsCalibrationRef.current = true; alert("기준점(영점) 설정이 완료되었습니다!"); }}
-              className="px-6 py-3.5 bg-white text-slate-700 border border-slate-200 rounded-2xl font-bold shadow-sm hover:bg-slate-50 transition-all hover:border-slate-300 active:scale-95 flex items-center gap-2"
+              onClick={handleCalibrationRequest}
+              disabled={calibrationCountdown !== null}
+              className="px-6 py-3.5 bg-white text-slate-700 border border-slate-200 rounded-2xl font-bold shadow-sm hover:bg-slate-50 transition-all hover:border-slate-300 active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              🎯 기준점 재설정
+              🎯 {calibrationCountdown !== null ? `설정 중 (${calibrationCountdown})` : '영점 조절'}
             </button>
           )}
           <button
@@ -327,6 +353,7 @@ export default function Dashboard() {
       </div>
 
       <div className="flex flex-col gap-8">
+        {/* 상단 스태츠 카드 영역 */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[
             { label: '진행 시간', value: formatTime(focusSeconds), unit: '', icon: '⏱️', color: 'text-indigo-600', bgColor: 'bg-indigo-50' },
@@ -358,6 +385,14 @@ export default function Dashboard() {
               <div className="w-full aspect-[4/3] bg-slate-950 rounded-2xl relative overflow-hidden shadow-2xl shadow-slate-200">
                 <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover transform -scale-x-100 opacity-95" />
                 <canvas ref={canvasRef} className="absolute inset-0 w-full h-full transform -scale-x-100 z-10" width="640" height="480" />
+
+                {/* 카운트다운 오버레이 */}
+                {calibrationCountdown !== null && (
+                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-slate-900/60 backdrop-blur-sm">
+                    <div className="text-8xl font-black text-white animate-pulse mb-4">{calibrationCountdown}</div>
+                    <p className="text-white text-xl font-bold tracking-tight">정면을 유지해 주세요</p>
+                  </div>
+                )}
 
                 {!isFocusing && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 z-20 text-white gap-4">
@@ -405,6 +440,7 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* 데이터 테이블 영역 */}
         <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden mt-2">
           <div className="p-6 px-8 border-b border-slate-100 flex justify-between items-center">
             <h3 className="font-bold text-slate-900 text-lg tracking-tight">실시간 데이터 기록</h3>
