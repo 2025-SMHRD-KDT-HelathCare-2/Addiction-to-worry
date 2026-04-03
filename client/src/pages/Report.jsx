@@ -121,16 +121,16 @@ export default function Report() {
               poseBreakdown: detailedPoses,
               mainNoise: NOISE_LABEL_MAP[noise_summary?.main_obstacle] || "주변 소음",
               aiFeedback: (() => {
-                if (!session.ai_feedback) return "분석된 피드백 데이터가 존재하지 않습니다.";
+                if (!session.ai_feedback) return { raw: "분석된 피드백 데이터가 존재하지 않습니다." };
                 try {
                   const parsed = JSON.parse(session.ai_feedback);
+                  // JSON 파싱 후 객체 형태를 그대로 렌더링 영역으로 전달 (항목별 분리용)
                   if (typeof parsed === 'object' && parsed !== null) {
-                    const { 오늘의총평 = '', 긍정분석 = '', 보완사항 = '', 집중태그 = '' } = parsed;
-                    return `${오늘의총평} ${긍정분석} ${보완사항} ${집중태그}`.trim();
+                    return parsed;
                   }
-                  return session.ai_feedback;
+                  return { raw: session.ai_feedback };
                 } catch {
-                  return session.ai_feedback;
+                  return { raw: session.ai_feedback };
                 }
               })(),
             },
@@ -246,8 +246,31 @@ export default function Report() {
   const lineData = {
     labels: reportData.chart.labels,
     datasets: [
-      { label: '집중 에너지', data: reportData.chart.scores, borderColor: '#5B44F2', backgroundColor: 'rgba(91, 68, 242, 0.06)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0, yAxisID: 'y' },
-      { label: '주변 소음', data: reportData.chart.noises, borderColor: 'rgba(148, 163, 184, 0.6)', borderWidth: 1.5, borderDash: [4, 4], tension: 0.4, pointRadius: 0, yAxisID: 'y1' }
+      { 
+        label: '집중 에너지', 
+        data: reportData.chart.scores, 
+        borderColor: '#5B44F2', 
+        backgroundColor: 'rgba(91, 68, 242, 0.06)', 
+        borderWidth: 2, 
+        fill: true, 
+        tension: 0.4, 
+        pointRadius: reportData.chart.scores.map(score => score < 80 ? 5 : 0), 
+        pointBackgroundColor: reportData.chart.scores.map(score => score < 80 ? '#e11d48' : '#5B44F2'), 
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2,
+        pointHoverRadius: 7,
+        yAxisID: 'y' 
+      },
+      { 
+        label: '주변 소음', 
+        data: reportData.chart.noises, 
+        borderColor: 'rgba(148, 163, 184, 0.6)', 
+        borderWidth: 1.5, 
+        borderDash: [4, 4], 
+        tension: 0.4, 
+        pointRadius: 0, 
+        yAxisID: 'y1' 
+      }
     ]
   };
 
@@ -284,19 +307,42 @@ export default function Report() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-8">
-        {/* lg:col-span-6으로 변경하여 비율 6:6 조정 */}
         <div className="lg:col-span-6">
           <div className="h-full bg-[#5B44F2] text-white p-6 md:p-8 rounded-3xl shadow-xl shadow-indigo-100 relative overflow-hidden transition-all">
-            <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
-              <div className="w-20 h-20 md:w-24 md:h-24 bg-white/10 rounded-3xl flex items-center justify-center border border-white/20"><AiBrainApiIcon /></div>
-              <div className="text-center md:text-left flex-1">
-                <h3 className="text-indigo-200 text-xs font-black uppercase tracking-widest mb-2">AI 집중 분석 피드백</h3>
-                <p className="text-lg md:text-xl font-bold leading-relaxed break-keep">"{reportData.summary.aiFeedback}"</p>
+            <div className="relative z-10 flex flex-col md:flex-row items-start gap-6">
+              <div className="w-16 h-16 md:w-20 md:h-20 bg-white/10 rounded-2xl flex items-center justify-center border border-white/20 shrink-0"><AiBrainApiIcon /></div>
+              <div className="text-left flex-1 w-full">
+                <h3 className="text-indigo-200 text-xs font-black uppercase tracking-widest mb-3">AI 집중 분석 피드백</h3>
+                
+                {reportData.summary.aiFeedback.오늘의총평 ? (
+                  <div className="flex flex-col gap-4">
+                    <p className="text-xl md:text-2xl font-black text-white leading-tight break-keep">
+                      "{reportData.summary.aiFeedback.오늘의총평}"
+                    </p>
+                    
+                    <div className="bg-white/10 rounded-2xl p-4 md:p-5 border border-white/20 text-sm font-medium text-indigo-50 leading-relaxed break-keep space-y-3">
+                      <p><span className="font-bold text-white mr-2">💡 긍정:</span>{reportData.summary.aiFeedback.긍정분석}</p>
+                      <p><span className="font-bold text-rose-200 mr-2">🎯 보완:</span>{reportData.summary.aiFeedback.보완사항}</p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {reportData.summary.aiFeedback.집중태그.split(' ').map((tag, idx) => {
+                        if(!tag.trim()) return null;
+                        return (
+                          <span key={idx} className="px-3.5 py-1.5 bg-[#4a36c4] border border-indigo-400/50 rounded-full text-xs font-bold text-indigo-100 shadow-sm">
+                            {tag}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-lg md:text-xl font-bold leading-relaxed break-keep">"{reportData.summary.aiFeedback.raw}"</p>
+                )}
               </div>
             </div>
           </div>
         </div>
-        {/* lg:col-span-6으로 변경하여 비율 6:6 조정 */}
         <div className="lg:col-span-6">
           <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-100 shadow-sm h-full hover:shadow-md transition-all">
             <h3 className="text-base font-bold text-slate-900 mb-5 flex items-center gap-2"><span className="w-1.5 h-4 bg-rose-500 rounded-full"></span>자세 정밀 분석</h3>
