@@ -2,8 +2,9 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
 /**
- * [404 Not Found 페이지]
- * - 서비스 메인 무드(#5B44F2)에 맞춘 디자인 폴리싱
+ * [404 Error 페이지]
+ * - 존재하지 않는 경로 접근 시 렌더링
+ * - 메인 테마색상 기반 UI 적용 및 홈 이동 유도
  */
 export default function NotFound() {
   const navigate = useNavigate();

@@ -1,9 +1,9 @@
 import React from 'react';
 
 /**
- * [홈페이지 - 드래그 시인성 보정 및 한국어 버전]
- * - [수정] selection:text-indigo-900 추가로 드래그 시 글자 사라짐 현상 해결
- * - 현경님의 시그니처 배경 링 애니메이션 및 하단 아이콘 가시성 유지
+ * [랜딩 페이지]
+ * - 서비스 핵심 가치 전달 및 회원가입/로그인 진입점
+ * - 시인성 확보를 위한 selection 가상 요소 적용
  */
 export default function Home({ onStart }) {
   return (

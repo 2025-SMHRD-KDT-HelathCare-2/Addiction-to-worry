@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { authApi } from '../shared/api';
 
 /**
- * [회원가입 페이지 폴리싱]
- * - 로그인/마이페이지와 동일한 톤앤매너 적용
- * - 비동기 처리 시 버튼 비활성화 로직 추가
+ * [회원가입 페이지]
+ * - 닉네임 중복 검사 로직
+ * - 이메일 인증 번호 발송 및 유효성 검증 체인 구성
+ * - 회원가입 성공 시 자동 로그인 및 대시보드 리다이렉트
  */
 export default function SignUp({ onNavigate, setIsLoggedIn }) {
   const [nick, setNick] = useState('');
@@ -14,6 +15,7 @@ export default function SignUp({ onNavigate, setIsLoggedIn }) {
   const [isVerified, setIsVerified] = useState(false);
   const [authCode, setAuthCode] = useState('');
 
+  /* 닉네임 사용 가능 여부 API 검증 */
   const handleNickCheck = async () => {
     if (!nick) return alert("닉네임을 먼저 입력해주세요.");
     try {
@@ -28,6 +30,7 @@ export default function SignUp({ onNavigate, setIsLoggedIn }) {
     } catch (err) { alert("통신 오류가 발생했습니다."); }
   };
 
+  /* 가입 요청 이메일로 6자리 인증 코드 발송 요청 */
   const handleSendEmail = async () => {
     if (!email) return alert("이메일을 입력해주세요.");
     try {
@@ -39,6 +42,7 @@ export default function SignUp({ onNavigate, setIsLoggedIn }) {
     } catch (err) { alert("이메일 발송 중 오류가 발생했습니다."); }
   };
 
+  /* 사용자가 입력한 인증 코드의 정합성 확인 */
   const handleVerifyCode = async () => {
     try {
       const data = await authApi.verifyEmailCode(email, authCode);
@@ -49,6 +53,7 @@ export default function SignUp({ onNavigate, setIsLoggedIn }) {
     } catch (err) { alert("인증 중 서버 오류가 발생했습니다."); }
   };
 
+  /* 최종 폼 검증 (인증 여부, 비밀번호 일치) 후 회원 데이터 생성 */
   const handleSignUp = async (e) => {
     e.preventDefault();
     if (!isNickChecked) return alert("닉네임 중복 확인이 필요합니다.");

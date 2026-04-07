@@ -4,11 +4,14 @@ import { io } from 'socket.io-client';
 import { immersionApi } from '../shared/api';
 
 /**
- * 실시간 집중도 트래킹 및 HUD 스켈레톤 대시보드
- * - [수정완료] 소켓 서버 주소를 .env 환경변수(VITE_API_URL) 기반으로 동적 할당
- * - 척추 중심선 및 얼굴 윤곽 하이테크 스켈레톤 구현
+ * [실시간 집중도 트래킹 및 HUD 스켈레톤 대시보드]
+ * - MediaPipe 기반 실시간 비전(자세, 안면) 분석 및 소켓 스트리밍
+ * - Web Audio API를 활용한 주변 소음(dB) 실시간 측정
+ * - 사용자의 신체 비율(baseEarDist)에 맞춘 카메라 캘리브레이션(영점 조절)
+ * - 분석 엔진 결과에 따른 실시간 점수(Score) 및 상태 표출
  */
 export default function Dashboard() {
+  /* (Hook 및 Ref 선언부 - 기존 코드 유지) */
   const navigate = useNavigate();
 
   const videoRef = useRef(null);
@@ -42,8 +45,9 @@ export default function Dashboard() {
   const [serverStatus, setServerStatus] = useState('--');
   const [displayScore, setDisplayScore] = useState('--');
 
+  /* 웹소켓 연결 및 분석 엔진 피드백 수신 리스너 설정 */
   useEffect(() => {
-    // 하드코딩 제거: 운영 서버 배포 시 소켓 연결 끊김 방지
+    // 하드코딩 제거: 운영/개발 환경 분리를 위한 환경변수 바인딩
     const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
     socketRef.current = io(SOCKET_URL, { withCredentials: true });
     
@@ -51,8 +55,8 @@ export default function Dashboard() {
       if (data.status === 'SUCCESS') {
         setIsEngineReady(true);
         let currentStatus = 'NORMAL';
+        // 백엔드 분석 엔진(analysis_engine.js)의 상세 상태값을 통합 UI 상태로 필터링
         const backendPosture = data.posture_status || data.postureStatus || '';
-
         if (backendPosture.includes('_WARNING') || backendPosture === 'LEANING_ON_HAND') { currentStatus = 'WARNING'; }
         else if (backendPosture.includes('_CAUTION')) { currentStatus = 'CAUTION'; }
         
@@ -70,6 +74,7 @@ export default function Dashboard() {
     return () => { if (socketRef.current) socketRef.current.disconnect(); };
   }, [calibrationCountdown, isAnalyzing]);
 
+  /* 집중 시간 타이머 로직 */
   useEffect(() => {
     let interval;
     if (isFocusing && !isAnalyzing) interval = setInterval(() => setFocusSeconds(p => p + 1), 1000);
@@ -77,11 +82,13 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [isFocusing, isAnalyzing]);
 
+  // 초(s) 데이터를 'HH:MM:SS' 형식으로 포맷팅
   const formatTime = (sec) => {
     const h = Math.floor(sec / 3600); const m = Math.floor((sec % 3600) / 60); const s = sec % 60;
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  /* 맞춤형 캘리브레이션(영점 조절) 타이머 구동 로직 */
   const handleCalibrationRequest = () => {
     if (calibrationCountdown !== null || isAnalyzing) return;
     let timer = 3;
@@ -105,6 +112,7 @@ export default function Dashboard() {
     }, 1000);
   };
 
+  /* 카메라 권한 요청, 모델 로드, 렌더링 루프 초기화 */
   const startCamera = async () => {
     setServerFeedback("AI 분석 엔진을 준비 중입니다. 잠시만 기다려주세요...");
     const loadScript = (src) => new Promise((res) => { const s = document.createElement('script'); s.src = src; s.onload = res; document.body.appendChild(s); });
@@ -138,6 +146,7 @@ export default function Dashboard() {
     faceMesh.onResults((res) => { faceLandmarksRef.current = res.multiFaceLandmarks?.[0] || null; });
 
     pose.onResults((res) => {
+      // 측정 중단 혹은 대상자 인식 불가 시 처리
       if (!canvasRef.current || isAnalyzing) return;
       if (!res.poseLandmarks) {
         setServerFeedback("⚠️ 사용자를 찾을 수 없습니다! 상체가 잘 보이도록 정면을 향해 앉아주세요.");
@@ -146,13 +155,14 @@ export default function Dashboard() {
       
       const ctx = canvasRef.current.getContext('2d'); 
       ctx.save(); 
+      // ... 캔버스 초기화
       ctx.clearRect(0, 0, 640, 480);
       
       const w = 640; 
       const h = 480;
       const p = res.poseLandmarks;
 
-      /* 영점 조절 가이드라인 */
+      /* [UX 요소] 캘리브레이션 설정 후 기준선(가이드라인) 렌더링 */
       if (calibrationRef.current && !needsCalibrationRef.current) {
         const { noseY, distY } = calibrationRef.current;
         const calibNoseY = noseY * h;
@@ -166,7 +176,8 @@ export default function Dashboard() {
         ctx.setLineDash([]); 
       }
 
-      /* 인체 공학적 하이테크 HUD 스켈레톤 */
+      //* 핵심 랜드마크 기반 하이테크 스켈레톤(척추, 어깨 선) 드로잉 */
+      /* FaceMesh 기반 안면 윤곽 드로잉 */
       if (p[11] && p[12] && p[0]) {
         ctx.strokeStyle = "rgba(99, 102, 241, 0.7)"; 
         ctx.lineWidth = 3;
@@ -216,12 +227,14 @@ export default function Dashboard() {
       
       ctx.restore();
 
+      /* 캘리브레이션 트리거 시 신체 기준 정보(귀/코 위치, 어깨 간격 등) 저장 */
       if (needsCalibrationRef.current) {
         const leftEar = res.poseLandmarks[7] || { x: 0, y: 0 }; const leftShoulder = res.poseLandmarks[11] || { x: 0, y: 0 }; const nose = res.poseLandmarks[0] || { x: 0, y: 0 }; const rightEar = res.poseLandmarks[8] || { x: 0, y: 0 };
         calibrationRef.current = { distY: Math.abs(leftEar.y - leftShoulder.y), noseY: nose.y, earX: leftEar.x, sideDistX: Math.abs(leftEar.x - leftShoulder.x) * 640, baseEarDist: Math.abs(leftEar.x - rightEar.x) * 640 };
         needsCalibrationRef.current = false;
       }
 
+      /* 백엔드 연산 부하 방지를 위해 1초(1000ms) 단위로 데이터 패킷 전송 (Throttling) */
       const now = Date.now();
       if (now - lastSentTimeRef.current >= 1000) {
         lastSentTimeRef.current = now;
@@ -229,6 +242,7 @@ export default function Dashboard() {
       }
     });
 
+    // 카메라 피드 시작 및 모델 실행 루프
     await faceMesh.initialize(); await pose.initialize();
     if (videoRef.current) {
       cameraRef.current = new SafeCamera(videoRef.current, { onFrame: async () => { if (videoRef.current && poseRef.current && faceMeshRef.current && !isAnalyzing) { try { await poseRef.current.send({ image: videoRef.current }); await faceMeshRef.current.send({ image: videoRef.current }); } catch (err) { } } }, width: 640, height: 480 });
@@ -236,6 +250,7 @@ export default function Dashboard() {
     }
   };
 
+  /* 카메라, 오디오, MediaPipe 인스턴스 자원 해제 */
   const stopCamera = () => {
     if (cameraRef.current) { cameraRef.current.stop(); cameraRef.current = null; }
     if (videoRef.current?.srcObject) { videoRef.current.srcObject.getTracks().forEach(t => t.stop()); videoRef.current.srcObject = null; }
@@ -245,6 +260,7 @@ export default function Dashboard() {
     setIsEngineReady(false); setServerFeedback("우측 상단의 '▶ 측정 시작' 버튼을 눌러주세요."); setServerStatus('--'); setDisplayScore('--');
   };
 
+  /* 세션 시작 처리 (DB 식별자 발급 및 스트리밍 개시) */
   const handleStartMeasurement = async () => {
     try {
       const userInfoStr = localStorage.getItem('user_info');
@@ -258,6 +274,7 @@ export default function Dashboard() {
     } catch (err) { alert("서버 통신 중 에러가 발생했습니다."); }
   };
 
+  /* 측정 종료 및 AI 리포트 생성 프로세스 진입 */
   const handleStopMeasurement = async () => {
     if (!currentImmIdxRef.current) return;
     

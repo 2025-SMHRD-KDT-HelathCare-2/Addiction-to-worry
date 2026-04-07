@@ -2,12 +2,12 @@ import React from 'react';
 import { authApi } from '../shared/api';
 
 /**
- * [최종 밸런스 조정] 
- * - 네이버, 카카오, 구글 소셜 로그인 버튼을 1:1:1 동일 사이즈로 맞춤
- * - 현경님 5-1 시안의 프리미엄 디자인 감성 유지
- * - [수정] '몰입' -> '집중' 문구 일괄 교체
+ * [로그인 페이지]
+ * - 이메일 기반 로컬 로그인 처리
+ * - OAuth 2.0 기반 소셜 로그인(네이버, 카카오, 구글) 연동
  */
 export default function Login({ onNavigate, setIsLoggedIn }) {
+  /* 로컬 이메일/비밀번호 검증 및 세션 발급 요청 */
   const handleLogin = async (e) => {
     e.preventDefault();
     const email = e.target.email.value;
@@ -26,6 +26,7 @@ export default function Login({ onNavigate, setIsLoggedIn }) {
     }
   };
 
+  /* 소셜 로그인 프로바이더(Provider) 리다이렉션 라우팅 */
   const handleSocialLogin = (provider) => {
     const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
     window.location.href = `${BASE_URL}/auth/${provider}`;
