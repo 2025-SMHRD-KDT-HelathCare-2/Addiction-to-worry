@@ -58,7 +58,7 @@ async function sendEmailCode(email) {
   const authCode = generateAuthCode();
 
   const [existingUsers] = await pool.query(
-    'SELECT id FROM users WHERE email = ?',
+    'SELECT user_idx FROM users WHERE email = ?',
     [normalizedEmail]
   );
 
