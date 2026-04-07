@@ -7,6 +7,13 @@ import {
 
 import { immersionApi } from '../shared/api';
 
+/**
+ * [종합 분석 리포트]
+ * - 세션 리스트 조회 (보관함 모드) 및 단일 세션 상세 조회 (상세 모드) 분기 처리
+ * - Gemini AI 분석 결과(JSON) 파싱 및 구조화된 피드백 렌더링
+ * - Chart.js를 이용한 시간대별 점수 및 소음 트렌드 시각화
+ * - 백엔드 분석 엔진의 15종 자세 상태 코드를 프론트엔드 UI/한국어 라벨에 매핑
+ */
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
 const NOISE_LABEL_MAP = {
@@ -32,6 +39,7 @@ const POSE_DETAIL_MAP = {
   'TURTLE_NECK_CAUTION': { label: '거북목 주의', color: 'text-amber-600', bg: 'bg-amber-50 border-amber-100' }
 };
 
+/* 초 단위 누적 시간을 'X시간 X분 X초' 포맷으로 변환하는 유틸리티 */
 const formatSecondsToKoreanTime = (totalSeconds) => {
   if (!totalSeconds || totalSeconds === 0) return '0초';
   const h = Math.floor(totalSeconds / 3600); const m = Math.floor((totalSeconds % 3600) / 60); const s = totalSeconds % 60;
@@ -40,14 +48,15 @@ const formatSecondsToKoreanTime = (totalSeconds) => {
 };
 
 export default function Report() {
+  /* 라우터 파라미터 기반 뷰 모드 판단 (리스트 vs 상세) */
   const navigate = useNavigate();
   const { imm_idx } = useParams();
   const isDetailsMode = !!imm_idx && imm_idx !== 'undefined';
-
   const [isLoading, setIsLoading] = useState(true);
   const [reportData, setReportData] = useState(null); 
   const [fullHistory, setFullHistory] = useState([]); 
 
+  /* 데이터 패칭 및 AI 피드백 파싱 (Fallback 처리 포함) */
   useEffect(() => {
     const fetchAllData = async () => {
       try {
@@ -74,13 +83,16 @@ export default function Report() {
 
           const totalWarningSeconds = detailedPoses.filter(p => !['NORMAL', 'GOOD_POSTURE'].includes(p.status)).reduce((sum, p) => sum + p.count, 0);
           
+          // AI 분석 데이터 무결성 검증 및 예외 상황 방어 로직 (Fallback)
           let aiFeedback = { 오늘의총평: "분석 데이터를 구성하고 있습니다.", 긍정분석: "세션 기록 정상 완료", 보완사항: "다음 측정은 1분 이상 유지해 보세요.", 집중태그: "#집중" };
           if (session.ai_feedback) {
             try { 
               const parsed = JSON.parse(session.ai_feedback); 
               if (typeof parsed === 'object' && parsed !== null) aiFeedback = parsed;
               else throw new Error();
-            } catch { aiFeedback.오늘의총평 = session.ai_feedback.includes("오류") ? "AI 분석 생성 실패" : session.ai_feedback; }
+            } catch {
+              // 파싱 실패 또는 백엔드 에러 발생 시 UI 깨짐 방지 
+              aiFeedback.오늘의총평 = session.ai_feedback.includes("오류") ? "AI 분석 생성 실패" : session.ai_feedback; }
           }
 
           setReportData({

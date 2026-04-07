@@ -1,14 +1,14 @@
-/* Tailwind CSS v4 전용 코어 엔진 호출 지시어입니다. */
+/* Tailwind CSS v4 전용 코어 엔진 호출 지시어 */
 @import "tailwindcss";
 
-/* v3 호환성을 위해 상위 폴더에 있는 tailwind.config.js를 스캔하도록 명시적으로 연결합니다. */
+/* v3 호환성을 위한 외부 설정 파일 명시적 연결 */
 @config "../tailwind.config.js";
 
 @layer base {
   body {
     margin: 0;
     padding: 0;
-    /* 프리미엄 메쉬 그라데이션 배경 (라이트 모드 원본 유지) */
+    /* 전역 테마: 라이트 모드 메쉬 그라데이션 배경 적용 */
     background: radial-gradient(circle at 0% 0%, #f1f5f9 0%, #e2e8f0 100%) !important;
     background-attachment: fixed !important;
     min-height: 100vh;
@@ -19,7 +19,7 @@
     transition: background 0.3s ease, color 0.3s ease;
   }
 
-  /* html에 dark 클래스가 붙었을 때만 다크모드 배경 작동 */
+  /* 다크 모드 활성화 시 배경색 반전 처리 */
   html.dark body {
     background: radial-gradient(circle at 0% 0%, #0f172a 0%, #020617 100%) !important;
     color: #f8fafc;
@@ -27,6 +27,7 @@
 }
 
 @layer components {
+  /* 전역 UI 등장 애니메이션 정의 */
   .animate-fade-in {
     animation: fadeIn 0.4s ease-out forwards;
   }

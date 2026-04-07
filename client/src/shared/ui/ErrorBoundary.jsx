@@ -1,28 +1,30 @@
 import React from 'react';
 
 /**
- * 전역 런타임 에러 핸들러 컴포넌트
- * 애플리케이션의 치명적인 오류를 감지하고 사용자 친화적인 복구 화면을 제공합니다.
+ * 전역 런타임 에러 핸들러 (Error Boundary)
+ * - 하위 컴포넌트 트리에서 발생하는 자바스크립트 예외를 포착하여 애플리케이션 크래시(백화 현상) 방지
+ * - 에러 발생 시 사용자 이탈을 최소화하기 위한 자체 Fallback UI 렌더링
  */
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
+    // 에러 상태 초기화
     this.state = { hasError: false, error: null };
   }
 
+  // 에러 발생 시 생명주기 메서드: 상태를 업데이트하여 다음 렌더링에 Fallback UI 표출
   static getDerivedStateFromError(error) {
-    /* 다음 렌더링에서 폴백 UI가 보이도록 상태를 업데이트합니다. */
     return { hasError: true, error };
   }
 
+  // 에러 상세 정보 캐치 및 로깅을 위한 생명주기 메서드
   componentDidCatch(error, errorInfo) {
-    /* 에러 로깅 서비스(예: Sentry)에 에러를 기록할 수 있는 영역입니다. */
     console.error("Uncaught Error:", error, errorInfo);
   }
 
   render() {
     if (this.state.hasError) {
-      /* 에러 발생 시 노출되는 프리미엄 폴백 UI */
+      // 에러 발생 시 노출되는 Fallback 화면 디자인 영역
       return (
         <div className="flex items-center justify-center min-h-screen p-6 bg-[#f8fafc] font-sans">
           <div className="max-w-xl w-full text-center p-12 bg-white border border-slate-200 shadow-2xl rounded-[2.5rem] animate-fade-in">
@@ -37,6 +39,7 @@ class ErrorBoundary extends React.Component {
               페이지를 새로고침하거나 잠시 후 다시 시도해 주세요.
             </p>
             <div className="flex flex-col gap-3">
+              {/* 상태 초기화 및 페이지 복구 액션 제공 */}
               <button 
                 onClick={() => window.location.reload()} 
                 className="w-full py-4 bg-[#5B44F2] text-white rounded-2xl font-black shadow-lg hover:bg-[#4a36c4] active:scale-95 transition-all"
@@ -55,6 +58,7 @@ class ErrorBoundary extends React.Component {
       );
     }
 
+    // 에러가 없을 경우 정상적인 자식 컴포넌트 트리 렌더링
     return this.props.children;
   }
 }

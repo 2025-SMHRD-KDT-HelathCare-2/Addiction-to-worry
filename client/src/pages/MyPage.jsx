@@ -3,16 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { immersionApi, authApi } from '../shared/api';
 
 /**
- * [마이페이지 - 한국어 최적화 및 뱃지 컬렉션 최종본]
- * - 뱃지 상점 -> 뱃지 컬렉션 개념으로 전환 (결제 버튼 삭제 및 자동 획득 안내 추가)
- * - '몰입' -> '집중' 문구 일괄 교체 완비
- * - 달력 헤더(SUN~SAT)를 한국어(일~토)로 변경
- * - 비밀번호 변경 및 탈퇴 버튼 삭제 완료
- * - [수정] 미사용 아이콘(Dead Code) 제거 및 목표 현황 표기 단위(%) 통일
+ * [마이페이지 - 대시보드 및 사용자 설정]
+ * - 사용자 프로필(이미지, 레벨, 닉네임) 조회 및 수정 기능
+ * - 포인트 연동형 뱃지 컬렉션 (수동 결제 -> 자동 획득 방식으로 UX 개선)
+ * - 월간 집중 캘린더 및 일별 성취도(%) 트래킹
+ * - 환경 설정 (소음 임계치 조정, 알림 토글) 및 상태 로컬 스토리지 동기화
  */
 const UserIcon = () => <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>;
 const CameraIcon = () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>;
 
+/* 뱃지 획득 기준 데이터 정의 */
 const BADGE_GUIDE = [
   { id: 'starter', name: '초보 집중러', threshold: 100, icon: '🌱' },
   { id: 'bronze', name: '브론즈 뱃지', threshold: 500, icon: '🥉' },
@@ -22,6 +22,7 @@ const BADGE_GUIDE = [
 ];
 
 export default function MyPage() {
+  /* (Hook 선언부 - 기존 코드 유지) */
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
   const userInfoStr = localStorage.getItem('user_info');
@@ -41,6 +42,7 @@ export default function MyPage() {
   const [calendarDate, setCalendarDate] = useState(new Date());
 
   const handleImageClick = () => fileInputRef.current.click();
+  /* 프로필 이미지 변경 핸들러 (서버 업로드 및 로컬 상태 동기화) */
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -60,6 +62,7 @@ export default function MyPage() {
     } catch (err) { alert("이미지 업로드 실패"); }
   };
 
+  /* 초기 데이터 패칭: 통계(Stats) 및 누적 기록(History) 병렬 요청 */
   useEffect(() => {
     if (!userInfo) { navigate('/login'); return; }
     const fetchAllData = async () => {
@@ -77,17 +80,20 @@ export default function MyPage() {
     fetchAllData();
   }, [userInfo?.user_idx, navigate]);
 
+  /* 사용자 환경 설정값 변경 시 로컬 스토리지 자동 동기화 */
   useEffect(() => {
     localStorage.setItem('smart_focus_noise_db', noiseThreshold);
     localStorage.setItem('setting_sound_alert', isSoundAlert);
     localStorage.setItem('setting_weekly_report', isWeeklyReport);
   }, [noiseThreshold, isSoundAlert, isWeeklyReport]);
 
-  if (isLoading) return <div className="min-h-[85vh] flex flex-col items-center justify-center gap-4"><div className="w-12 h-12 border-4 border-[#5B44F2] border-t-transparent rounded-full animate-spin"></div><p className="text-slate-500 font-black animate-pulse">개인 대시보드를 불러오는 중...</p></div>;
+  if (isLoading) return <div className="min-h-[85vh] flex flex-col items-center justify-center gap-4"><div className="w-12 h-12 border-4 border-[#5B44F2] border-t-transparent rounded-full animate-spin"></div><p className="text-slate-500 font-black animate-pulse">개인 대시보드를 불러오는 중...</p></div>; // ... (로딩 상태 처리 유지)
 
+  /* 사용자 누적 포인트를 기반으로 현재 레벨 및 잔여 경험치 계산 로직 */
   const currentLevel = Math.floor((pageData.stats?.total_points || 0) / 500) + 1;
   const levelExp = (pageData.stats?.total_points || 0) % 500;
 
+  /* 달력 렌더링을 위한 날짜 배열 생성 로직 */
   const displayYear = calendarDate.getFullYear(); const displayMonth = calendarDate.getMonth();
   const daysInMonthCount = new Date(displayYear, displayMonth + 1, 0).getDate();
   const blankDays = Array.from({ length: new Date(displayYear, displayMonth, 1).getDay() }, (_, i) => i);

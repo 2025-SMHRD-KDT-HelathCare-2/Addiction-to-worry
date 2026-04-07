@@ -11,6 +11,12 @@ import Dashboard from '../pages/Dashboard';
 import Report from '../pages/Report';
 import MyPage from '../pages/MyPage';
 
+/**
+ * [애플리케이션 최상위 컨테이너]
+ * - 전역 다크/라이트 모드 테마 관리
+ * - 초기 로드 시 세션 유효성 검증(자동 로그인 유지)
+ * - GNB(Global Navigation Bar) 렌더링 및 페이지 라우팅 분기
+ */
 export default function App() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
@@ -18,6 +24,7 @@ export default function App() {
 
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
 
+  /* 로컬 스토리지 설정을 읽어 테마 초기화 및 DOM 반영 */
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
@@ -28,6 +35,7 @@ export default function App() {
     }
   }, [isDarkMode]);
 
+  /* 앱 초기화 시 서버에 세션 유효 여부를 질의하여 인증 상태 복구 */
   useEffect(() => {
     const checkSession = async () => {
       try {
@@ -44,6 +52,7 @@ export default function App() {
     checkSession();
   }, []);
 
+  /* 세션 종료 및 클라이언트 인증 정보 초기화 */
   const handleLogout = async () => {
     try {
       await authApi.logout();
@@ -67,7 +76,7 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            {/* --- [수정 포인트] 네비게이션 바 메뉴 영문 대문자화 완료 --- */}
+            {/* --- 네비게이션 바 메뉴 영문 대문자화 --- */}
             {!isLoggedIn ? (
               <div className="flex gap-2">
                 <button onClick={() => navigate('/login')} className="px-5 py-2.5 rounded-xl text-[11px] font-black text-indigo-200 hover:text-white transition-colors uppercase tracking-[0.2em]">LOGIN</button>
