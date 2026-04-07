@@ -5,9 +5,9 @@ import { immersionApi } from '../shared/api';
 
 /**
  * [실시간 집중도 트래킹 및 HUD 대시보드]
+ * - [Bug Fix] React Closure Trap 해결: pose.onResults 내부에서 최신 isFocusing 상태를 참조하도록 isFocusingRef 도입
  * - 다크모드 전역 테마 동기화 및 에러 방어 로직 완비
- * - [UX 개선] 초보자를 위한 풀스크린 온보딩 오버레이(Onboarding Overlay) 추가
- * - [UX 개선] 영점 조절(캘리브레이션) 강제화 로직 유지 및 불량 툴팁(Layout Shift 유발) 제거
+ * - [UX 개선] 영점 조절 클릭 시 카메라 선행 구동 (Live Calibration)
  */
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -30,33 +30,32 @@ export default function Dashboard() {
   const currentImmIdxRef = useRef(null);
 
   const [decibel, setDecibel] = useState(0);
+  
+  // [Bug Fix] 상태(State)와 최신 참조(Ref)를 동시 관리하여 콜백 내부 지연(Stale) 현상 방지
   const [isFocusing, setIsFocusing] = useState(false);
+  const isFocusingRef = useRef(false); 
+
   const [isEngineReady, setIsEngineReady] = useState(false);
   const [focusSeconds, setFocusSeconds] = useState(0);
   const [historyLog, setHistoryLog] = useState([]);
 
+  const [cameraState, setCameraState] = useState('OFF');
   const [calibrationCountdown, setCalibrationCountdown] = useState(null);
   const [calibrationFlash, setCalibrationFlash] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   
   const [hasCalibrated, setHasCalibrated] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('hide_dashboard_guide') !== 'true');
 
-  /* [UX 개선] 온보딩 가이드 모달 노출 상태 관리 (로컬 스토리지 연동) */
-  const [showOnboarding, setShowOnboarding] = useState(() => {
-    return localStorage.getItem('hide_dashboard_guide') !== 'true';
-  });
-
-  const [serverFeedback, setServerFeedback] = useState("우측 상단의 '🎯 영점 조절' 버튼을 눌러 기준점을 설정해 주세요.");
+  const [serverFeedback, setServerFeedback] = useState("우측 상단의 '🎯 영점 조절' 버튼을 눌러 카메라를 켜주세요.");
   const [serverStatus, setServerStatus] = useState('--');
   const [displayScore, setDisplayScore] = useState('--');
 
-  /* 가이드 모달 닫기 처리 */
   const closeOnboarding = (neverShowAgain = false) => {
     if (neverShowAgain) localStorage.setItem('hide_dashboard_guide', 'true');
     setShowOnboarding(false);
   };
 
-  /* 웹소켓 연결 및 분석 엔진 피드백 수신 */
   useEffect(() => {
     const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
     socketRef.current = io(SOCKET_URL, { withCredentials: true });
@@ -95,17 +94,33 @@ export default function Dashboard() {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const handleCalibrationRequest = () => {
+  const handleCalibrationRequest = async () => {
     if (calibrationCountdown !== null || isAnalyzing) return;
+
+    if (cameraState === 'OFF') {
+      setCameraState('STARTING');
+      setServerFeedback("AI 분석 엔진과 카메라를 활성화하고 있습니다...");
+      await startCamera();
+      setCameraState('ON');
+    }
+
+    setServerFeedback("곧 영점 조절을 시작합니다. 화면을 보고 바른 자세를 잡아주세요.");
+    
+    setTimeout(() => {
+      startCountdown();
+    }, 2000);
+  };
+
+  const startCountdown = () => {
     let timer = 3;
     setCalibrationCountdown(timer);
-    setServerFeedback(`${timer}초 후 기준점을 설정합니다. 바른 자세로 정면을 응시하세요.`);
+    setServerFeedback(`${timer}초 후 기준점을 설정합니다. 정면을 응시하세요.`);
 
     const countdownInterval = setInterval(() => {
       timer -= 1;
       if (timer > 0) {
         setCalibrationCountdown(timer);
-        setServerFeedback(`${timer}초 후 기준점을 설정합니다. 바른 자세로 정면을 응시하세요.`);
+        setServerFeedback(`${timer}초 후 기준점을 설정합니다. 정면을 응시하세요.`);
       } else {
         clearInterval(countdownInterval);
         setCalibrationCountdown(null);
@@ -119,7 +134,6 @@ export default function Dashboard() {
   };
 
   const startCamera = async () => {
-    setServerFeedback("AI 분석 엔진을 준비 중입니다. 잠시만 기다려주세요...");
     const loadScript = (src) => new Promise((res) => { const s = document.createElement('script'); s.src = src; s.onload = res; document.body.appendChild(s); });
     if (!window.Pose) await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js');
     if (!window.FaceMesh) await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js');
@@ -158,15 +172,12 @@ export default function Dashboard() {
       }
       
       const ctx = canvasRef.current.getContext('2d'); 
-      ctx.save(); 
-      ctx.clearRect(0, 0, 640, 480);
-      
+      ctx.save(); ctx.clearRect(0, 0, 640, 480);
       const w = 640; const h = 480; const p = res.poseLandmarks;
 
       if (calibrationRef.current && !needsCalibrationRef.current) {
         const { noseY, distY } = calibrationRef.current;
-        const calibNoseY = noseY * h;
-        const calibShoulderY = (noseY + distY) * h;
+        const calibNoseY = noseY * h; const calibShoulderY = (noseY + distY) * h;
         ctx.setLineDash([5, 5]); ctx.strokeStyle = "rgba(52, 211, 153, 0.6)"; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(w * 0.15, calibNoseY); ctx.lineTo(w * 0.85, calibNoseY); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(w * 0.1, calibShoulderY); ctx.lineTo(w * 0.9, calibShoulderY); ctx.stroke();
@@ -199,8 +210,9 @@ export default function Dashboard() {
         needsCalibrationRef.current = false;
       }
 
+      /* [Bug Fix] isFocusing(State) 대신 isFocusingRef.current(Ref)를 참조하여 정확한 전송 제어 */
       const now = Date.now();
-      if (now - lastSentTimeRef.current >= 1000) {
+      if (isFocusingRef.current && currentImmIdxRef.current && (now - lastSentTimeRef.current >= 1000)) {
         lastSentTimeRef.current = now;
         if (socketRef.current) socketRef.current.emit('stream_data', { imm_idx: currentImmIdxRef.current, landmarks: res.poseLandmarks, noise_db: decibelRef.current, calibration: calibrationRef.current, faceLandmarks: faceLandmarksRef.current });
       }
@@ -219,8 +231,18 @@ export default function Dashboard() {
     if (audioContextRef.current) { audioContextRef.current.close(); audioContextRef.current = null; }
     if (poseRef.current) { poseRef.current.close(); poseRef.current = null; }
     if (faceMeshRef.current) { faceMeshRef.current.close(); faceMeshRef.current = null; }
-    setIsEngineReady(false); setServerFeedback("우측 상단의 '▶ 측정 시작' 버튼을 눌러주세요."); setServerStatus('--'); setDisplayScore('--');
+    
+    setCameraState('OFF');
     setHasCalibrated(false); 
+    setIsEngineReady(false);
+    
+    // [Ref 연동] 스톱 시 Ref 초기화
+    setIsFocusing(false);
+    isFocusingRef.current = false;
+
+    setServerFeedback("우측 상단의 '🎯 영점 조절' 버튼을 눌러 카메라를 켜주세요."); 
+    setServerStatus('--'); 
+    setDisplayScore('--');
   };
 
   const handleStartMeasurement = async () => {
@@ -233,10 +255,19 @@ export default function Dashboard() {
       const userInfoStr = localStorage.getItem('user_info');
       if (!userInfoStr) { navigate('/login'); return; }
       const actualUserIdx = JSON.parse(userInfoStr).user_idx;
+      
       const result = await immersionApi.start(actualUserIdx);
       if (result && result.success && result.data?.imm_idx) {
-        setCurrentImmIdx(result.data.imm_idx); currentImmIdxRef.current = result.data.imm_idx;
-        setIsFocusing(true); setFocusSeconds(0); setHistoryLog([]); startCamera();
+        setCurrentImmIdx(result.data.imm_idx); 
+        currentImmIdxRef.current = result.data.imm_idx;
+        
+        // [Ref 연동] State와 Ref 동시 활성화
+        setIsFocusing(true); 
+        isFocusingRef.current = true;
+
+        setFocusSeconds(0); 
+        setHistoryLog([]); 
+        setServerFeedback("AI 모니터링이 시작되었습니다. 집중을 유지해 주세요.");
       } else { alert("세션 시작에 실패했습니다."); }
     } catch (err) { alert("서버 통신 중 에러가 발생했습니다."); }
   };
@@ -253,7 +284,12 @@ export default function Dashboard() {
       const result = await immersionApi.end({ imm_idx: currentImmIdxRef.current, imm_score: finalScore, user_idx: JSON.parse(userInfoStr).user_idx });
       
       if (result && result.success) { 
-        setIsFocusing(false); stopCamera(); navigate(`/report/${currentImmIdxRef.current}`); 
+        // [Ref 연동] State와 Ref 동시 비활성화
+        setIsFocusing(false); 
+        isFocusingRef.current = false;
+        
+        stopCamera(); 
+        navigate(`/report/${currentImmIdxRef.current}`); 
       } else {
         alert(result?.message || "리포트 생성에 실패했습니다. 잠시 후 다시 시도해주세요.");
       }
@@ -266,7 +302,6 @@ export default function Dashboard() {
   return (
     <div className="max-w-[1400px] mx-auto min-h-[90vh] p-6 lg:p-10 animate-fade-in font-sans selection:bg-indigo-100 dark:selection:bg-indigo-900/50 relative">
       
-      {/* [UX 개선] 풀스크린 온보딩 오버레이 모달 */}
       {showOnboarding && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm animate-fade-in px-4">
           <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] p-10 shadow-2xl border border-slate-200 dark:border-slate-700">
@@ -277,14 +312,14 @@ export default function Dashboard() {
                 <div className="w-12 h-12 bg-[#5B44F2] text-white rounded-full flex items-center justify-center font-black text-xl shadow-md shrink-0">1</div>
                 <div>
                   <h3 className="font-bold text-slate-900 dark:text-white text-lg">영점 조절 진행</h3>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm font-semibold mt-1">상단 우측의 🎯 영점 조절 버튼을 누르고 바른 자세로 3초간 정면을 응시하세요.</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm font-semibold mt-1">우측 상단의 🎯 영점 조절 버튼을 누르면 카메라가 켜집니다. 화면을 보고 3초간 정면을 응시하세요.</p>
                 </div>
               </div>
               <div className="flex items-center gap-5 p-5 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl border border-indigo-100 dark:border-indigo-800/50">
                 <div className="w-12 h-12 bg-[#5B44F2] text-white rounded-full flex items-center justify-center font-black text-xl shadow-md shrink-0">2</div>
                 <div>
                   <h3 className="font-bold text-slate-900 dark:text-white text-lg">측정 시작</h3>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm font-semibold mt-1">영점 조절 완료 후 활성화된 ▶ 측정 시작 버튼을 누르면 AI 모니터링이 시작됩니다.</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm font-semibold mt-1">영점 조절 완료 후 활성화된 ▶ 측정 시작 버튼을 누르면 부드럽게 AI 모니터링이 시작됩니다.</p>
                 </div>
               </div>
             </div>
@@ -304,14 +339,13 @@ export default function Dashboard() {
         </div>
         <div className="flex gap-4 items-center">
           
-          {/* 툴팁 제거 및 버튼 UI 안정화 */}
           {!isFocusing && !isAnalyzing && (
             <button
               onClick={handleCalibrationRequest}
-              disabled={calibrationCountdown !== null}
+              disabled={calibrationCountdown !== null || cameraState === 'STARTING'}
               className={`px-6 py-3.5 border rounded-2xl font-bold shadow-sm transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${hasCalibrated ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/50' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
             >
-              {hasCalibrated ? '✅ 설정 완료' : calibrationCountdown !== null ? `🎯 설정 중 (${calibrationCountdown})` : '🎯 영점 조절'}
+              {cameraState === 'STARTING' ? '카메라 로딩 중...' : hasCalibrated ? '✅ 설정 완료' : calibrationCountdown !== null ? `🎯 설정 중 (${calibrationCountdown})` : '🎯 영점 조절'}
             </button>
           )}
           
@@ -373,6 +407,19 @@ export default function Dashboard() {
                 <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover transform -scale-x-100 opacity-95" />
                 <canvas ref={canvasRef} className="absolute inset-0 w-full h-full transform -scale-x-100 z-10" width="640" height="480" />
 
+                {cameraState === 'OFF' && !isAnalyzing && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 z-20 text-white gap-4 animate-fade-in">
+                    <p className="font-bold tracking-wider text-sm text-slate-300">카메라 대기 중... '영점 조절'을 눌러 카메라를 켜주세요.</p>
+                  </div>
+                )}
+
+                {cameraState === 'STARTING' && !isAnalyzing && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 z-20 text-white gap-5 animate-fade-in">
+                    <div className="w-12 h-12 border-4 border-[#5B44F2] border-t-transparent rounded-full animate-spin"></div>
+                    <p className="font-bold text-sm tracking-widest text-slate-200">AI 모델 데이터 및 카메라 로딩 중...</p>
+                  </div>
+                )}
+
                 {isAnalyzing && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-sm z-50 text-white gap-6 animate-fade-in">
                     <div className="w-16 h-16 border-4 border-indigo-400 border-t-transparent rounded-full animate-spin shadow-[0_0_15px_rgba(99,102,241,0.5)]"></div>
@@ -405,18 +452,6 @@ export default function Dashboard() {
                 )}
 
                 <div className={`absolute inset-0 z-40 bg-emerald-400 mix-blend-overlay pointer-events-none transition-all duration-700 ease-out ${calibrationFlash && !isAnalyzing ? 'opacity-70 scale-105' : 'opacity-0 scale-100'}`}></div>
-
-                {!isFocusing && !isAnalyzing && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 z-20 text-white gap-4">
-                    <p className="font-bold tracking-wider text-sm text-slate-300">카메라 대기 중... '영점 조절' 후 '측정 시작'을 눌러주세요.</p>
-                  </div>
-                )}
-                {isFocusing && !isEngineReady && !isAnalyzing && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 z-20 text-white gap-5">
-                    <div className="w-12 h-12 border-4 border-[#5B44F2] border-t-transparent rounded-full animate-spin"></div>
-                    <p className="font-bold text-sm tracking-widest text-slate-200">AI 모델 데이터를 불러오는 중...</p>
-                  </div>
-                )}
               </div>
             </div>
           </div>
