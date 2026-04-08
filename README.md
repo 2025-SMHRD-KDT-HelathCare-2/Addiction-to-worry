@@ -82,3 +82,58 @@ GitHub에 README 작성
 원인: (1) 환경변수 API 키 불일치로 AI 호출이 실패하고 fallback 처리됨
       (2) 정상 응답 이후에도 코드블록(JSON) 형태로 반환되어 파싱 실패 발생
 해결: API 키 변수 통일 및 모델 설정 수정, 응답에서 코드블록 제거 후 JSON.parse 처리로 정상 파싱
+
+- 조성현(Frontend)
+  - [1] 실시간 데이터 스트리밍 누락(Closure Trap) 문제
+    문제: 측정 시작 후 UI 타이머는 정상 작동하나 실시간 점수 및 집중도 데이터가 업데이트되지 않고 고정되는 현상 발생
+    원인: MediaPipe 비동기 콜백 함수가 렌더링 초기 상태(isFocusing: false)만 기억하는 리액트 클로저 트랩(Closure Trap) 발생
+    해결: 렌더링 주기와 무관하게 항상 최신 값을 유지하는 useRef(isFocusingRef)를 도입하여 콜백 내부에서 최신 상태를 참조하도록 수정
+    ```javascript
+    // [Problem] 클로저 트랩으로 인해 초기 상태값(false)에 갇힘
+    pose.onResults((res) => {
+      if (isFocusing) { // 항상 false로 인식되어 실행되지 않음
+        socketRef.current.emit('stream_data', { ... });
+      }
+    });
+
+    // [Solution] useRef를 사용하여 렌더링과 독립적인 최신 참조값 확보
+    const isFocusingRef = useRef(false);
+    pose.onResults((res) => {
+      if (isFocusingRef.current) { // 최신 상태를 실시간으로 인지
+        socketRef.current.emit('stream_data', { ... });
+      }
+    });
+    ```
+
+  - [2] 영점 조절(Calibration) 시 사용자 인지 오류 및 UI 시프트 문제
+    문제: 영점 조절 시 카메라 화면이 켜지지 않은 상태에서 카운트다운만 노출되어 정확한 자세 설정이 어렵고 측정 시작 시 화면 깜빡임 발생
+    원인: '측정 시작' 클릭 시점에 카메라를 구동하는 수동적 설계로 인해 흐름이 부자연스러움
+    해결: 영점 조절 클릭 시 카메라를 선행 구동하고, 측정 시작 시 재구동 없이 세션만 전환하는 심리스(Seamless) UX 구현
+    ```javascript
+    // 영점 조절 시 카메라와 AI 모델을 먼저 활성화하여 시각적 피드백 제공
+    const handleCalibrationRequest = async () => {
+      if (cameraState === 'OFF') {
+        await startCamera(); // 카메라 선행 구동
+        setCameraState('ON');
+      }
+      startCountdown(); // 이후 카운트다운 진행
+    };
+    ```
+
+  - [3] 회원가입 이메일 중복 시 무반응(Silent Failure) 및 입력 불편 문제
+    문제: 이미 가입된 이메일 사용 시 에러 알림이 없어 화면이 멈춘 것처럼 보이고, 매번 도메인을 수동 타이핑해야 함
+    원인: API 통신 예외 처리에 대한 UI 피드백 누락 및 입력 보조 기능 부재
+    해결: try-catch 기반 에러 핸들링 및 키보드 네비게이션이 가능한 자동완성 드롭다운 구현
+    ```javascript
+    // 예외 상황에 대한 명확한 Alert 피드백과 로딩 스피너 적용
+    const handleSendEmail = async () => {
+      setIsEmailSending(true); // 로딩 시작
+      try {
+        const data = await authApi.sendEmailCode(email);
+        if (data.success) alert("인증 코드를 발송했습니다.");
+        else alert(data.message || "이미 가입된 이메일입니다."); // 예외 처리
+      } finally {
+        setIsEmailSending(false); // 로딩 종료
+      }
+    };
+    ```
