@@ -23,19 +23,92 @@ GitHub에 README 작성
   - MediaPipe, Gemini API 연동, SocketIO, Node.js, Express, Web Audio API, Chart.js
 
 6. 시스템 아키텍처
-  - 
+  - 프론트엔드
+    - React 기반 SPA (Single Page Application)
+    - mediapipe.js를 활용한 브라우저 로컬 자세 분석
+    - Web Audio API를 통한 실시간 데시벨 측정
+    - Chart.js/Recharts를 활용한 데이터 시각화
+    - Bootstrap 반응형 웹 디자인
+    - 백엔드
+  - Node.js + Express 서버
+    - Socket.IO를 통한 실시간 양방향 통신
+    - Gemini API 연동을 통한 AI 피드백 생성
+    - RESTful API 설계
+  - 데이터베이스
+    - MySQL 기반 관계형 데이터베이스
+    - 회원 정보, 집중 세션, 소음/자세 로그, AI 피드백, 포인트/뱃지 데이터 관리
+  - 주요 기술 스택
+    - 자세 분석: MediaPipe (BlazePose)
+    - 소음 감지: Web Audio API
+    - AI 코칭: Gemini API
+    - 실시간 통신: Socket.IO
+    - 데이터 저장: MySQL
 
 7. 유스케이스
-  - 
+  - 회원 관리
+    - 회원가입 (이메일, 비밀번호, 닉네임)
+    - 로그인/로그아웃
+    - 개인정보 수정
+  - 집중 모드
+    - 카메라 확인 및 집중 모드 시작/종료
+    - 실시간 소음 감지 (75dB 초과 시 이벤트 캡처)
+    - 실시간 자세 분석 (거북목, 어깨 비대칭, 턱 괴기, 허리 굽힘, 장시간 정적 자세)
+    - 잘못된 자세 감지 시 알림 메시지 출력
+  - AI 코칭
+    - 소음 및 자세 데이터 기반 Gemini API 피드백 생성
+    - 집중력 저하 원인 분석 및 개선 제안
+  - 게임화 요소
+    - 바른 자세 5분 유지 시 포인트 적립
+    - 하루 목표 달성 시 뱃지 부여
+  - 리포트 조회
+    - 일별/주별 집중 점수, 소음 빈도, 자세 오류 그래프 시각화
+    - 마이페이지에서 포인트/뱃지 현황 및 집중 기록 이력 조회 
 
 8. 서비스 흐름도
-  -
+  - 로그인 플로우 : 시작 → 이메일/비밀번호 입력 → 유효성 검사 → (성공) JWT 발급 및 메인 이동 → (실패) 오류 메시지 표시
+  - 집중 모드 플로우 : 카메라 확인 → 집중 모드 시작 → 소음 감지 (Web Audio API) → 자세 분석 (mediapipe.js) → AI 피드백 생성 (Gemini API) → 집중 점수 기록 (MySQL DB)
+  - 리포트 플로우 : 리포트 탭 선택 (일/주) → DB에서 데이터 조회 → 집중 점수 그래프 출력 → 소음 빈도 그래프 출력 → 자세 오류 그래프 출력
 
 9. ER 다이어그램
-  -
+  - 주요 테이블 구조
+    - users (회원 관리) : user_idx (PK), email (UK), pwd, nick, created_at
+    - immersions (집중 모드 세션) : imm_idx (PK), user_idx (FK), imm_date, start_time, end_time, imm_score
+    - noises (소음 감지 로그) : noise_idx (PK), imm_idx (FK), decibel, obj_name, reliability, detected_at
+    - poses (자세 분석 로그) : pose_idx (PK), imm_idx (FK), pose_status, pose_type, detected_at
+    - feedbacks (AI 피드백) : fb_idx (PK), pose_idx (FK), fb_content, created_at
+    - points (포인트 적립) : point_idx (PK), user_idx (FK), reward_type, reward_point, earned_at
+    - badges (뱃지 정보) : badge_idx (PK), badge_name, badge_desc, badge_point
+    - user_badges (사용자 획득 뱃지) : ubadge_idx (PK), user_idx (FK), badge_idx (FK), created_at
+  - 관계
+    - users 1:N immersions
+    - immersions 1:N noises, poses
+    - poses 1:N feedbacks
+    - users 1:N points, user_badges
+    - badges 1:N user_badges
 
-10 .화면구성
-  -
+10. 화면구성
+  - SCR_001: 홈페이지
+    - 로그인 및 회원가입 폼 제공
+    - 처음 접속하는 사용자를 위한 랜딩 페이지
+  - SCR_002: 회원가입
+    - 이메일, 비밀번호, 닉네임 입력
+    - 유효성 검사 및 중복 확인
+  - SCR_003: 로그인
+    - 이메일/비밀번호 인증
+    - 소셜 로그인 지원 (옵션)
+  - SCR_004: 메인 화면
+    - 카메라 미리보기
+    - 집중 모드 시작/종료 버튼
+    - 분석 리포트, 마이페이지 메뉴 네비게이션
+  - SCR_005: 분석 리포트
+    - 일별/주별 집중 점수 그래프
+    - 소음 빈도 및 자세 오류 시각화
+    - AI 피드백 요약
+  - SCR_006: 마이페이지
+    - 사용자 정보 (닉네임, 이메일)
+    - 포인트 및 뱃지 현황
+    - 집중 기록 이력
+    - 개인정보 수정 및 환경 설정
 
 11. 팀원역할
   - 주양덕(PM, DataBase 보조)
